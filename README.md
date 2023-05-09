@@ -2,7 +2,7 @@
 Unity Editor tool, which helps design game-logic database (such as characters, weapons, items stats etc.) using Google Spreadsheets.
 
 # Disclaimer
-This package has been included as a module into NorskaLib repository; this repository will not receive updates!
+This package has been included as a module into [NorskaLib](https://github.com/NorskaGames/NorskaLibUPM/tree/master/Spreadsheets) repository; this repository will not receive updates!
 
 # How to
 ## Install the Package
