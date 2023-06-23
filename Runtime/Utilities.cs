@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
@@ -55,6 +54,9 @@ namespace NorskaLib.GoogleSheetsDatabase.Utils
 
             if (type == typeof(bool))
                 return ParseBool(s, out error);
+
+            if (type == typeof(List<int>))
+                return ParseList(s, out error);
 
             if (type.IsEnum)
             {
@@ -121,6 +123,27 @@ namespace NorskaLib.GoogleSheetsDatabase.Utils
                 CultureInfo.InvariantCulture,
                 out var result);
             return result;
+        }
+
+        public static List<int> ParseList(string s, out bool error)
+        {
+            var list = new List<int>();
+            var stringArray = s.Split(',');
+            error = false;
+
+            foreach (var value in stringArray)
+            {
+                if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int result))
+                {
+                    list.Add(result);
+                }
+                else
+                {
+                    error = true;
+                }
+            }
+
+            return list;
         }
     }
 }

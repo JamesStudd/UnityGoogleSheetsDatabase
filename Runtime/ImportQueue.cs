@@ -156,6 +156,11 @@ namespace NorskaLib.GoogleSheetsDatabase
             var headersToFields = new Dictionary<string, FieldInfo>();
             foreach (var h in headers)
             {
+                if (h.StartsWith("_"))
+                {
+                    continue;
+                }
+                
                 var fieldInfo = contentType.GetField(h, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 if (fieldInfo is null)
                 {
@@ -171,8 +176,13 @@ namespace NorskaLib.GoogleSheetsDatabase
                 var item = Activator.CreateInstance(contentType);
 
                 for (int i = 0; i < headers.Count; i++)
+                {
                     if (headersToFields.TryGetValue(headers[i], out var field))
-                        field.SetValue(item, Utilities.Parse(row[i], field.FieldType));
+                    {
+                        var value = Utilities.Parse(row[i], field.FieldType);
+                        field.SetValue(item, value);
+                    }
+                }
 
                 list.Add(item);
             }
