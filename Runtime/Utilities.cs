@@ -57,6 +57,13 @@ namespace NorskaLib.GoogleSheetsDatabase.Utils
 
             if (type == typeof(List<int>))
                 return ParseList(s, out error);
+            
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                var elementType = type.GetGenericArguments()[0];
+                if (elementType.IsEnum)
+                    return ParseEnumList(s, elementType, out error);
+            }
 
             if (type.IsEnum)
             {
@@ -76,6 +83,41 @@ namespace NorskaLib.GoogleSheetsDatabase.Utils
             return default(object);
         }
 
+        private static object ParseEnumList(string s, Type enumType, out bool error)
+        {
+            error = false;
+
+            var items = s.Split(',');
+            var listType = typeof(List<>).MakeGenericType(enumType);
+            var list = (System.Collections.IList)Activator.CreateInstance(listType);
+
+            foreach (var item in items)
+            {
+                var trimmed = item.Trim();
+                try
+                {
+                    if (!Enum.IsDefined(enumType, trimmed))
+                    {
+                        // This only checks against names. If using numeric values, you’d want to handle that differently.
+                        Console.WriteLine($"'{trimmed}' is not a valid value for enum {enumType.Name}.");
+                        error = true;
+                        return null;
+                    }
+
+                    var parsed = Enum.Parse(enumType, trimmed, true);
+                    list.Add(parsed);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to parse '{trimmed}' into {enumType.Name} enum. Exception: {ex.Message}");
+                    error = true;
+                    return null;
+                }
+            }
+
+            return list;
+        }
+        
         public static int ParseInt(string s, out bool error)
         {
             error = !int.TryParse(s, out var result);
