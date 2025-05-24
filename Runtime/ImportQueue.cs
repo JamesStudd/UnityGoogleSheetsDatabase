@@ -72,25 +72,29 @@ namespace NorskaLib.GoogleSheetsDatabase
             onComplete.Invoke(container);
         }
 
-        private async Task PopulateList(DataContainerBase container, FieldInfo listInfo, WebClient webClient)
+        private async Task PopulateList(DataContainerBase container, FieldInfo fieldInfo, WebClient webClient)
         {
-            var contentType = listInfo.FieldType.GetGenericArguments().SingleOrDefault();
+            Type fieldType = fieldInfo.FieldType;
+            bool isList = typeof(IList).IsAssignableFrom(fieldType);
+            Type contentType = isList
+                ? fieldType.GetGenericArguments().SingleOrDefault()
+                : fieldType;
+
             if (contentType is null)
             {
-                Debug.LogError($"Could not identify type of defs stored in {listInfo.Name}");
+                Debug.LogError($"Could not identify type of defs stored in {fieldInfo.Name}");
                 return;
             }
 
             #region Downloading page
 
-            var googleSheetRef = (PageNameAttribute)Attribute.GetCustomAttribute(listInfo, typeof(PageNameAttribute));
+            var googleSheetRef = (PageNameAttribute)Attribute.GetCustomAttribute(fieldInfo, typeof(PageNameAttribute));
             var pagename = googleSheetRef.name;
 
             Output = $"Downloading page '{pagename}'...";
-
             var url = string.Format(URLFormat, documentID, pagename);
-            Task<string> request;
 
+            Task<string> request;
             try
             {
                 request = webClient.DownloadStringTaskAsync(url);
@@ -121,6 +125,7 @@ namespace NorskaLib.GoogleSheetsDatabase
             var idHeaderIdx = -1;
             var headers = new List<string>();
             var emptyHeadersIdxs = new List<int>();
+
             for (int i = 0; i < headersRaw.Length; i++)
             {
                 if (string.IsNullOrEmpty(headersRaw[i]))
@@ -149,31 +154,55 @@ namespace NorskaLib.GoogleSheetsDatabase
 
             #endregion
 
-            #region Parsing and populating list of defs 
+            #region Parsing and populating field
 
-            Output = $"Populating list of defs '{listInfo.Name}'<{contentType.Name}>...";
+            Output = $"Populating {(isList ? "list" : "single object")} of defs '{fieldInfo.Name}'<{contentType.Name}>...";
 
             var headersToFields = new Dictionary<string, FieldInfo>();
             foreach (var h in headers)
             {
-                if (h.StartsWith("_"))
-                {
-                    continue;
-                }
-                
-                var fieldInfo = contentType.GetField(h, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (fieldInfo is null)
+                if (h.StartsWith("_")) continue;
+
+                var field = contentType.GetField(h, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field == null)
                 {
                     Debug.LogWarning($"Header '{h}' match no field in {contentType.Name} type");
                     continue;
                 }
-                headersToFields.Add(h, fieldInfo);
+                headersToFields.Add(h, field);
             }
 
-            var list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(contentType));
-            foreach (var row in rows)
+            if (isList)
             {
+                var list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(contentType));
+                foreach (var row in rows)
+                {
+                    var item = Activator.CreateInstance(contentType);
+
+                    for (int i = 0; i < headers.Count; i++)
+                    {
+                        if (headersToFields.TryGetValue(headers[i], out var field))
+                        {
+                            var value = Utilities.Parse(row[i], field.FieldType);
+                            field.SetValue(item, value);
+                        }
+                    }
+
+                    list.Add(item);
+                }
+
+                fieldInfo.SetValue(container, list);
+            }
+            else
+            {
+                if (rows.Count == 0)
+                {
+                    Debug.LogWarning($"No data found for single object field '{fieldInfo.Name}'");
+                    return;
+                }
+
                 var item = Activator.CreateInstance(contentType);
+                var row = rows[0];
 
                 for (int i = 0; i < headers.Count; i++)
                 {
@@ -184,10 +213,8 @@ namespace NorskaLib.GoogleSheetsDatabase
                     }
                 }
 
-                list.Add(item);
+                fieldInfo.SetValue(container, item);
             }
-
-            listInfo.SetValue(container, list);
 
             Progress += 1 / 3f * ProgressElementDelta;
 
